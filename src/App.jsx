@@ -1,71 +1,132 @@
+import { useEffect, useMemo, useState } from 'react'
+import Navbar from './components/Navbar'
+import ProductCard from './components/ProductCard'
+import Cart from './components/Cart'
+
 function App() {
+  const [products, setProducts] = useState([])
+  const [filtered, setFiltered] = useState([])
+  const [cartOpen, setCartOpen] = useState(false)
+  const [cart, setCart] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [category, setCategory] = useState('All')
+
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(products.map(p => p.category))).sort()
+    return ['All', ...cats]
+  }, [products])
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+        const res = await fetch(`${baseUrl}/api/products`)
+        if (!res.ok) throw new Error('Failed to load products')
+        const data = await res.json()
+        setProducts(data)
+        setFiltered(data)
+        if (data.length === 0) {
+          // try seeding on empty
+          const seed = await fetch(`${baseUrl}/api/products/seed`, { method: 'POST' })
+          if (seed.ok) {
+            const again = await fetch(`${baseUrl}/api/products`)
+            if (again.ok) {
+              const seeded = await again.json()
+              setProducts(seeded)
+              setFiltered(seeded)
+            }
+          }
+        }
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchProducts()
+  }, [])
+
+  const handleSearch = (q) => {
+    const query = q.trim().toLowerCase()
+    const base = category === 'All' ? products : products.filter(p => p.category === category)
+    if (!query) return setFiltered(base)
+    setFiltered(base.filter(p =>
+      p.title.toLowerCase().includes(query) ||
+      (p.description || '').toLowerCase().includes(query) ||
+      (p.category || '').toLowerCase().includes(query)
+    ))
+  }
+
+  const handleCategory = (cat) => {
+    setCategory(cat)
+    if (cat === 'All') return setFiltered(products)
+    setFiltered(products.filter(p => p.category === cat))
+  }
+
+  const addToCart = (product) => {
+    setCartOpen(true)
+    setCart(prev => {
+      const exists = prev.find(i => i.id === product.id)
+      if (exists) {
+        return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+      }
+      return [...prev, { ...product, quantity: 1 }]
+    })
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <Navbar onSearch={handleSearch} />
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
-            </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Civil engineering supplies</h1>
+            <p className="text-slate-600">Concrete, steel, aggregates, cement and more.</p>
           </div>
-
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
+          <button onClick={() => setCartOpen(true)} className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700">
+            Cart ({cart.reduce((s,i)=>s+i.quantity,0)})
+          </button>
         </div>
-      </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => handleCategory(cat)}
+              className={`px-3 py-1.5 rounded-full text-sm border ${category===cat? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="grid place-items-center py-20 text-slate-600">Loading products...</div>
+        ) : error ? (
+          <div className="grid place-items-center py-20 text-red-600">{error}</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            {filtered.map(p => (
+              <ProductCard key={p.id} product={p} onAdd={addToCart} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {cartOpen && (
+        <Cart items={cart} onClose={() => setCartOpen(false)} />
+      )}
+
+      <footer className="border-t border-slate-200 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 text-sm text-slate-500 flex items-center justify-between">
+          <p>© {new Date().getFullYear()} CivilMart. All rights reserved.</p>
+          <a href="/test" className="hover:text-slate-700">System status</a>
+        </div>
+      </footer>
     </div>
   )
 }
